@@ -1,0 +1,21 @@
+[submodule "stakingTest/Counter/lib/forge-std"]
+	path = stakingTest/Counter/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "stakingTests/counter/lib/forge-std"]
+	path = stakingTests/counter/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "lib/openzeppelin-contracts"]
+	path = lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "stakingTests/counter/lib/openzeppelin-contracts"]
+	path = stakingTests/counter/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "challengeTest/counter/lib/forge-std"]
+	path = challengeTest/counter/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "ERC20_Diamond_Contract/lib/forge-std"]
+	path = ERC20_Diamond_Contract/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "esusu_chain/lib/forge-std"]
+	path = esusu_chain/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std

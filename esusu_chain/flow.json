@@ -1,0 +1,62 @@
+{
+	"contracts": {
+		"EsusuChain": {
+			"source": "cadence/contracts/EsusuChain.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007",
+				"testnet": "YOUR_TESTNET_ADDRESS"
+			}
+		},
+		"FungibleToken": {
+			"source": "",
+			"aliases": {
+				"emulator": "0xee82856bf20e2aa6",
+				"testnet": "0x9a0766d93b6608b7",
+				"mainnet": "0xf233dcee88fe0abe"
+			}
+		},
+		"FiatToken": {
+			"source": "",
+			"aliases": {
+				"emulator": "0xFIATTOKENADDRESS",
+				"testnet": "0xa983fecbed621163",
+				"mainnet": "0xb19436aae4d94622"
+			}
+		}
+	},
+	"networks": {
+		"emulator": "127.0.0.1:3569",
+		"mainnet": "access.mainnet.nodes.onflow.org:9000",
+		"testing": "127.0.0.1:3569",
+		"testnet": "access.devnet.nodes.onflow.org:9000"
+	},
+	"accounts": {
+		"emulator-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": {
+				"type": "file",
+				"location": "emulator-account.pkey"
+			}
+		},
+		"testnet-account": {
+			"address": "YOUR_TESTNET_ADDRESS",
+			"key": {
+				"type": "file",
+				"location": "testnet-account.pkey"
+			}
+		}
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": [
+				"EsusuChain"
+			]
+		},
+		"testnet": {
+			"testnet-account": [
+				"EsusuChain"
+			]
+		}
+	}
+}
