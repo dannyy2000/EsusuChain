@@ -372,7 +372,6 @@ access(all) fun testGetUserCircles() {
     )
     Test.expect(txResult, Test.beSucceeded())
 
-    // Get Alice's circles
     let scriptResult = executeScript(
         "../scripts/get_user_circles.cdc",
         [alice.address]
