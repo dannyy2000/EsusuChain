@@ -340,4 +340,12 @@ This project is licensed under the MIT License.
 
 ---
 
+
+## Resources
+
+- [Flow Documentation](https://developers.flow.com/)
+- [Cadence Language Reference](https://developers.flow.com/cadence/language)
+- [USDC on Flow](https://developers.flow.com/evm/guides/usdc)
+- [Forte Workflow](https://docs.forte.io/)
+
 Built with ❤️ for the Web3 community
