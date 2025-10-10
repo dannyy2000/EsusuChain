@@ -1,17 +1,18 @@
-import FungibleToken from 0xFUNGIBLETOKENADDRESS
-import FiatToken from 0xFIATTOKENADDRESS
+import FungibleToken from "FungibleToken"
+import FlowToken from "FlowToken"
 
-/// EsusuChain: A decentralized rotating savings and credit association (ROSCA) platform
-/// Built on Flow blockchain with automated contributions and payouts using Forte Workflow
+/// EsusuChain: Automated ROSCA using Flow Transaction Scheduler
+/// Members approve funds upfront, scheduler automatically pulls contributions and distributes payouts
 access(all) contract EsusuChain {
 
     // Events
     access(all) event CircleCreated(circleId: UInt64, creator: Address, numberOfMembers: UInt64, contributionAmount: UFix64, cycleDuration: UFix64)
-    access(all) event MemberJoined(circleId: UInt64, member: Address, position: UInt64)
-    access(all) event ContributionMade(circleId: UInt64, member: Address, amount: UFix64, cycle: UInt64)
-    access(all) event PayoutExecuted(circleId: UInt64, recipient: Address, amount: UFix64, cycle: UInt64)
+    access(all) event MemberJoined(circleId: UInt64, member: Address, position: UInt64, approvedAmount: UFix64)
+    access(all) event ContributionPulled(circleId: UInt64, member: Address, amount: UFix64, cycle: UInt64)
+    access(all) event PayoutDistributed(circleId: UInt64, recipient: Address, amount: UFix64, cycle: UInt64)
+    access(all) event CircleStarted(circleId: UInt64, startTime: UFix64)
+    access(all) event CycleCompleted(circleId: UInt64, cycle: UInt64)
     access(all) event CircleCompleted(circleId: UInt64)
-    access(all) event CycleAdvanced(circleId: UInt64, newCycle: UInt64)
 
     // Named Paths
     access(all) let CircleManagerStoragePath: StoragePath
@@ -19,38 +20,37 @@ access(all) contract EsusuChain {
 
     // Contract state
     access(all) var nextCircleId: UInt64
-    access(contract) let circles: @{UInt64: Circle}
+    access(self) let circles: @{UInt64: Circle}
 
-    /// Circle Status enum
+    /// Circle Status
     access(all) enum CircleStatus: UInt8 {
-        access(all) case Active
-        access(all) case Completed
-        access(all) case Cancelled
+        access(all) case Forming      // Waiting for members
+        access(all) case Active       // Running cycles
+        access(all) case Completed    // All payouts done
+        access(all) case Cancelled    // Circle cancelled
     }
 
-    /// Member information in a circle
+    /// Member information with capability for auto-withdrawal
     access(all) struct MemberInfo {
         access(all) let address: Address
         access(all) let position: UInt64
-        access(all) var totalContributed: UFix64
-        access(all) var hasPaidCurrentCycle: Bool
+        access(all) let approvedAmount: UFix64  // Total approved for all cycles
+        access(all) var contributedAmount: UFix64
+        access(all) var cyclesPaid: UInt64
         access(all) var hasReceivedPayout: Bool
 
-        init(address: Address, position: UInt64) {
+        init(address: Address, position: UInt64, approvedAmount: UFix64) {
             self.address = address
             self.position = position
-            self.totalContributed = 0.0
-            self.hasPaidCurrentCycle = false
+            self.approvedAmount = approvedAmount
+            self.contributedAmount = 0.0
+            self.cyclesPaid = 0
             self.hasReceivedPayout = false
         }
 
         access(contract) fun recordContribution(amount: UFix64) {
-            self.totalContributed = self.totalContributed + amount
-            self.hasPaidCurrentCycle = true
-        }
-
-        access(contract) fun resetCyclePayment() {
-            self.hasPaidCurrentCycle = false
+            self.contributedAmount = self.contributedAmount + amount
+            self.cyclesPaid = self.cyclesPaid + 1
         }
 
         access(contract) fun markPayoutReceived() {
@@ -58,7 +58,7 @@ access(all) contract EsusuChain {
         }
     }
 
-    /// Main Circle resource that holds the savings circle state
+    /// Main Circle resource with scheduler integration
     access(all) resource Circle {
         access(all) let circleId: UInt64
         access(all) let creator: Address
@@ -69,11 +69,15 @@ access(all) contract EsusuChain {
         access(all) var currentCycle: UInt64
         access(all) var currentPayoutPosition: UInt64
         access(all) let createdAt: UFix64
-        access(all) var lastCycleTimestamp: UFix64
+        access(all) var startedAt: UFix64?
+        access(all) var lastCycleTime: UFix64
 
         access(all) let members: {Address: MemberInfo}
         access(all) let memberOrder: [Address]
-        access(self) let vault: @FiatToken.Vault
+
+        // Store member vault capabilities for auto-withdrawal
+        access(self) let memberVaultCaps: {Address: Capability<auth(FungibleToken.Withdraw) &FlowToken.Vault>}
+        access(self) let vault: @FlowToken.Vault
 
         init(
             circleId: UInt64,
@@ -83,7 +87,7 @@ access(all) contract EsusuChain {
             cycleDuration: UFix64
         ) {
             pre {
-                numberOfMembers >= 2: "Circle must have at least 2 members"
+                numberOfMembers >= 1: "Circle must have at least 1 member"
                 contributionAmount > 0.0: "Contribution amount must be greater than 0"
                 cycleDuration > 0.0: "Cycle duration must be greater than 0"
             }
@@ -93,136 +97,184 @@ access(all) contract EsusuChain {
             self.numberOfMembers = numberOfMembers
             self.contributionAmount = contributionAmount
             self.cycleDuration = cycleDuration
-            self.status = CircleStatus.Active
+            self.status = CircleStatus.Forming
             self.currentCycle = 0
             self.currentPayoutPosition = 0
             self.createdAt = getCurrentBlock().timestamp
-            self.lastCycleTimestamp = getCurrentBlock().timestamp
+            self.startedAt = nil
+            self.lastCycleTime = 0.0
             self.members = {}
             self.memberOrder = []
-
-            // Initialize empty vault for holding contributions
-            self.vault <- FiatToken.createEmptyVault(vaultType: Type<@FiatToken.Vault>()) as! @FiatToken.Vault
+            self.memberVaultCaps = {}
+            self.vault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>()) as! @FlowToken.Vault
         }
 
-        /// Add a member to the circle
-        access(all) fun addMember(address: Address): UInt64 {
+        /// Add member with provider capability for auto-withdrawal
+        access(all) fun joinCircle(
+            member: Address,
+            vaultCap: Capability<auth(FungibleToken.Withdraw) &FlowToken.Vault>
+        ): UInt64 {
             pre {
+                self.status == CircleStatus.Forming: "Circle is not accepting members"
                 self.members.length < Int(self.numberOfMembers): "Circle is full"
-                self.members[address] == nil: "Member already exists"
-                self.status == CircleStatus.Active: "Circle is not active"
+                self.members[member] == nil: "Member already exists"
+                vaultCap.check(): "Invalid vault capability"
             }
 
-            let position = UInt64(self.members.length)
-            let memberInfo = MemberInfo(address: address, position: position)
-            self.members[address] = memberInfo
-            self.memberOrder.append(address)
+            // Calculate total amount member needs to approve
+            let totalRequired = self.contributionAmount * UFix64(self.numberOfMembers)
 
-            emit MemberJoined(circleId: self.circleId, member: address, position: position)
+            // Verify member has sufficient balance
+            let vaultRef = vaultCap.borrow()!
+            assert(vaultRef.balance >= totalRequired, message: "Insufficient balance for all cycles")
+
+            let position = UInt64(self.members.length)
+            let memberInfo = MemberInfo(
+                address: member,
+                position: position,
+                approvedAmount: totalRequired
+            )
+
+            self.members[member] = memberInfo
+            self.memberOrder.append(member)
+            self.memberVaultCaps[member] = vaultCap
+
+            emit MemberJoined(
+                circleId: self.circleId,
+                member: member,
+                position: position,
+                approvedAmount: totalRequired
+            )
+
+            // Start circle if full
+            if self.members.length == Int(self.numberOfMembers) {
+                self.startCircle()
+            }
+
             return position
         }
 
-        /// Check if circle is ready to start (all members joined)
-        access(all) fun isCircleFull(): Bool {
-            return self.members.length == Int(self.numberOfMembers)
+        /// Start the circle and begin first cycle
+        /// NOTE: After this is called, a TransactionHandler should be created and scheduled
+        /// to automate contribution pulls. See EsusuChainTransactionHandler contract.
+        access(self) fun startCircle() {
+            pre {
+                self.status == CircleStatus.Forming: "Circle already started"
+                self.members.length == Int(self.numberOfMembers): "Circle not full"
+            }
+
+            self.status = CircleStatus.Active
+            self.startedAt = getCurrentBlock().timestamp
+            self.lastCycleTime = getCurrentBlock().timestamp
+            self.currentCycle = 1
+
+            emit CircleStarted(circleId: self.circleId, startTime: self.startedAt!)
         }
 
-        /// Check if it's time to advance to next cycle
-        access(all) fun shouldAdvanceCycle(): Bool {
-            let timeSinceLastCycle = getCurrentBlock().timestamp - self.lastCycleTimestamp
-            return timeSinceLastCycle >= self.cycleDuration && self.allMembersPaidCurrentCycle()
-        }
+        /// AUTOMATED: Pull contributions from all members (called by scheduler)
+        access(all) fun pullContributions() {
+            pre {
+                self.status == CircleStatus.Active: "Circle is not active"
+                self.canPullContributions(): "Not time to pull contributions yet"
+            }
 
-        /// Check if all members have paid for current cycle
-        access(all) fun allMembersPaidCurrentCycle(): Bool {
+            // Pull from each member
             for address in self.memberOrder {
-                let member = self.members[address]!
-                if !member.hasPaidCurrentCycle {
-                    return false
+                let vaultCap = self.memberVaultCaps[address]!
+                let vaultRef = vaultCap.borrow()
+                    ?? panic("Cannot borrow member vault")
+
+                // Check if member has already paid this cycle
+                let memberInfo = self.members[address]!
+                if memberInfo.cyclesPaid >= self.currentCycle {
+                    continue // Already paid this cycle
                 }
+
+                // Withdraw contribution
+                let payment <- vaultRef.withdraw(amount: self.contributionAmount)
+                self.vault.deposit(from: <- payment)
+
+                // Update member info
+                self.members[address]!.recordContribution(amount: self.contributionAmount)
+
+                emit ContributionPulled(
+                    circleId: self.circleId,
+                    member: address,
+                    amount: self.contributionAmount,
+                    cycle: self.currentCycle
+                )
             }
-            return true
+
+            // After pulling all contributions, immediately distribute payout
+            self.distributePayout()
         }
 
-        /// Process a member's contribution
-        access(all) fun deposit(from: @{FungibleToken.Vault}, memberAddress: Address) {
+        /// AUTOMATED: Distribute payout to next member (called after contributions pulled)
+        access(self) fun distributePayout() {
             pre {
                 self.status == CircleStatus.Active: "Circle is not active"
-                self.isCircleFull(): "Circle is not full yet"
-                self.members[memberAddress] != nil: "Not a member of this circle"
-                from.balance == self.contributionAmount: "Incorrect contribution amount"
-            }
-
-            let member = self.members[memberAddress]!
-
-            // Cast to FiatToken.Vault to ensure type safety
-            let usdcVault <- from as! @FiatToken.Vault
-            let amount = usdcVault.balance
-
-            // Deposit into circle vault
-            self.vault.deposit(from: <- usdcVault)
-
-            // Update member info
-            self.members[memberAddress]!.recordContribution(amount: amount)
-
-            emit ContributionMade(circleId: self.circleId, member: memberAddress, amount: amount, cycle: self.currentCycle)
-
-            // Check if ready to advance cycle and payout
-            if self.shouldAdvanceCycle() {
-                self.advanceCycle()
-            }
-        }
-
-        /// Advance to next cycle and trigger payout
-        access(contract) fun advanceCycle() {
-            pre {
-                self.allMembersPaidCurrentCycle(): "Not all members have paid"
-            }
-
-            // Reset payment status for all members
-            for address in self.memberOrder {
-                self.members[address]!.resetCyclePayment()
-            }
-
-            self.currentCycle = self.currentCycle + 1
-            self.lastCycleTimestamp = getCurrentBlock().timestamp
-
-            emit CycleAdvanced(circleId: self.circleId, newCycle: self.currentCycle)
-        }
-
-        /// Execute payout to next member in rotation
-        access(all) fun payoutNextMember(): @{FungibleToken.Vault} {
-            pre {
-                self.status == CircleStatus.Active: "Circle is not active"
-                self.allMembersPaidCurrentCycle(): "Not all members have paid"
                 self.currentPayoutPosition < self.numberOfMembers: "All payouts completed"
             }
 
             let recipientAddress = self.memberOrder[self.currentPayoutPosition]
             let payoutAmount = self.contributionAmount * UFix64(self.numberOfMembers)
 
-            // Mark member as having received payout
+            // Get recipient's receiver capability
+            let receiverCap = getAccount(recipientAddress)
+                .capabilities.get<&{FungibleToken.Receiver}>(/public/flowTokenReceiver)
+                .borrow()
+                ?? panic("Cannot borrow receiver capability")
+
+            // Withdraw and send payout
+            let payout <- self.vault.withdraw(amount: payoutAmount)
+            receiverCap.deposit(from: <- payout)
+
+            // Update member status
             self.members[recipientAddress]!.markPayoutReceived()
 
-            // Withdraw from vault
-            let payout <- self.vault.withdraw(amount: payoutAmount)
+            emit PayoutDistributed(
+                circleId: self.circleId,
+                recipient: recipientAddress,
+                amount: payoutAmount,
+                cycle: self.currentCycle
+            )
 
-            emit PayoutExecuted(circleId: self.circleId, recipient: recipientAddress, amount: payoutAmount, cycle: self.currentCycle)
+            emit CycleCompleted(circleId: self.circleId, cycle: self.currentCycle)
 
-            // Move to next payout position
+            // Move to next position
             self.currentPayoutPosition = self.currentPayoutPosition + 1
 
-            // Check if circle is completed
+            // Check if circle is complete
             if self.currentPayoutPosition >= self.numberOfMembers {
                 self.status = CircleStatus.Completed
                 emit CircleCompleted(circleId: self.circleId)
+            } else {
+                // Advance to next cycle
+                self.currentCycle = self.currentCycle + 1
+                self.lastCycleTime = getCurrentBlock().timestamp
             }
-
-            return <- payout
         }
 
-        /// Get circle details
-        access(all) fun getCircleInfo(): {String: AnyStruct} {
+        /// Check if it's time to pull contributions
+        access(all) view fun canPullContributions(): Bool {
+            if self.status != CircleStatus.Active {
+                return false
+            }
+
+            let timeSinceLastCycle = getCurrentBlock().timestamp - self.lastCycleTime
+            return timeSinceLastCycle >= self.cycleDuration
+        }
+
+        /// Get next scheduled pull time
+        access(all) view fun getNextPullTime(): UFix64? {
+            if self.status != CircleStatus.Active {
+                return nil
+            }
+            return self.lastCycleTime + self.cycleDuration
+        }
+
+        /// Get circle info
+        access(all) view fun getCircleInfo(): {String: AnyStruct} {
             return {
                 "circleId": self.circleId,
                 "creator": self.creator,
@@ -233,22 +285,19 @@ access(all) contract EsusuChain {
                 "currentCycle": self.currentCycle,
                 "currentPayoutPosition": self.currentPayoutPosition,
                 "createdAt": self.createdAt,
+                "startedAt": self.startedAt,
                 "memberCount": self.members.length,
-                "vaultBalance": self.vault.balance
+                "vaultBalance": self.vault.balance,
+                "nextPullTime": self.getNextPullTime()
             }
         }
 
-        /// Get member info
-        access(all) fun getMemberInfo(address: Address): MemberInfo? {
+        access(all) view fun getMemberInfo(address: Address): MemberInfo? {
             return self.members[address]
         }
 
-        access(all) fun getVaultBalance(): UFix64 {
-            return self.vault.balance
-        }
-
-        destroy() {
-            destroy self.vault
+        access(all) view fun isCircleFull(): Bool {
+            return self.members.length == Int(self.numberOfMembers)
         }
     }
 
@@ -258,7 +307,7 @@ access(all) contract EsusuChain {
         access(all) fun getCircleInfo(circleId: UInt64): {String: AnyStruct}?
     }
 
-    /// Circle Manager resource for managing multiple circles
+    /// Circle Manager resource
     access(all) resource CircleManager: CircleManagerPublic {
         access(all) let circleIds: [UInt64]
 
@@ -281,13 +330,7 @@ access(all) contract EsusuChain {
                 cycleDuration: cycleDuration
             )
 
-            // Add creator as first member
-            circle.addMember(address: creator)
-
-            // Store circle in contract
-            let oldCircle <- EsusuChain.circles[circleId] <- circle
-            destroy oldCircle
-
+            EsusuChain.circles[circleId] <-! circle
             self.circleIds.append(circleId)
             EsusuChain.nextCircleId = EsusuChain.nextCircleId + 1
 
@@ -311,7 +354,7 @@ access(all) contract EsusuChain {
         }
     }
 
-    // Public functions
+    // Public contract functions
     access(all) fun createCircleManager(): @CircleManager {
         return <- create CircleManager()
     }
@@ -324,25 +367,23 @@ access(all) contract EsusuChain {
         return nil
     }
 
-    access(all) fun joinCircle(circleId: UInt64, member: Address) {
+    access(all) fun joinCircle(
+        circleId: UInt64,
+        member: Address,
+        vaultCap: Capability<auth(FungibleToken.Withdraw) &FlowToken.Vault>
+    ) {
         let circleRef = &self.circles[circleId] as &Circle?
-        ?? panic("Circle does not exist")
+            ?? panic("Circle does not exist")
 
-        circleRef.addMember(address: member)
+        circleRef.joinCircle(member: member, vaultCap: vaultCap)
     }
 
-    access(all) fun makeContribution(circleId: UInt64, memberAddress: Address, payment: @{FungibleToken.Vault}) {
+    /// SCHEDULER CALLS THIS: Pull contributions from all members
+    access(all) fun scheduledPullContributions(circleId: UInt64) {
         let circleRef = &self.circles[circleId] as &Circle?
-        ?? panic("Circle does not exist")
+            ?? panic("Circle does not exist")
 
-        circleRef.deposit(from: <- payment, memberAddress: memberAddress)
-    }
-
-    access(all) fun executePayout(circleId: UInt64): @{FungibleToken.Vault} {
-        let circleRef = &self.circles[circleId] as &Circle?
-        ?? panic("Circle does not exist")
-
-        return <- circleRef.payoutNextMember()
+        circleRef.pullContributions()
     }
 
     access(all) fun getMemberInfo(circleId: UInt64, address: Address): MemberInfo? {
@@ -351,6 +392,14 @@ access(all) contract EsusuChain {
             return circleRef!.getMemberInfo(address: address)
         }
         return nil
+    }
+
+    access(all) fun canPullContributions(circleId: UInt64): Bool {
+        let circleRef = &self.circles[circleId] as &Circle?
+        if circleRef != nil {
+            return circleRef!.canPullContributions()
+        }
+        return false
     }
 
     init() {

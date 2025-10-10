@@ -1,26 +1,23 @@
-import EsusuChain from "../contracts/EsusuChain.cdc"
+import EsusuChain from 0xa89655a0f8e3d113
 
 /// Transaction to create a new savings circle
-/// @param numberOfMembers: Total number of members in the circle
-/// @param contributionAmount: Amount each member contributes per cycle (in USDC)
-/// @param cycleDuration: Duration of each cycle in seconds
 transaction(numberOfMembers: UInt64, contributionAmount: UFix64, cycleDuration: UFix64) {
 
     let circleManager: &EsusuChain.CircleManager
-    let signerAddress: Address
+    let creatorAddress: Address
 
     prepare(signer: auth(Storage) &Account) {
-        self.signerAddress = signer.address
+        self.creatorAddress = signer.address
 
         // Borrow reference to CircleManager
         self.circleManager = signer.storage.borrow<&EsusuChain.CircleManager>(from: EsusuChain.CircleManagerStoragePath)
-            ?? panic("CircleManager not found. Please run setup_circle_manager.cdc first")
+            ?? panic("CircleManager not found")
     }
 
     execute {
         // Create the circle
         let circleId = self.circleManager.createCircle(
-            creator: self.signerAddress,
+            creator: self.creatorAddress,
             numberOfMembers: numberOfMembers,
             contributionAmount: contributionAmount,
             cycleDuration: cycleDuration
