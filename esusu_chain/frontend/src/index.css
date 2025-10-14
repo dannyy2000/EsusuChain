@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-50 font-sans;
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-flow-400 via-primary-400 to-flow-600;
+  }
+
+  .bg-gradient-flow {
+    @apply bg-gradient-to-br from-flow-500/20 via-primary-500/20 to-flow-600/20;
+  }
+
+  .glass-effect {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  }
+
+  .glow-effect {
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+  }
+}
