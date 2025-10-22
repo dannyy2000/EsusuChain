@@ -9,11 +9,18 @@ import {
   Calendar,
   CheckCircle2,
   Info,
-  Zap
+  Zap,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
+import { useAuth } from '../hooks/useAuth'
+import { useTransactions } from '../hooks/useTransactions'
 
 export default function CreateCircle({ onNavigate }) {
+  const { loggedIn } = useAuth()
+  const { createCircle, isLoading, error, txId } = useTransactions()
   const [step, setStep] = useState(1)
+  const [txStatus, setTxStatus] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
     numberOfMembers: '',
@@ -21,6 +28,23 @@ export default function CreateCircle({ onNavigate }) {
     cycleDuration: 'weekly',
     customDays: ''
   })
+
+  // Redirect if not logged in
+  if (!loggedIn) {
+    return (
+      <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Please connect your wallet</h2>
+          <button
+            onClick={() => onNavigate('dashboard')}
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-flow-500 to-primary-600 text-white font-semibold"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const cycleDurations = [
     { value: 'daily', label: 'Daily', days: 1 },
@@ -345,17 +369,74 @@ export default function CreateCircle({ onNavigate }) {
                   Back
                 </button>
                 <button
-                  onClick={() => {
-                    // TODO: Create circle on blockchain
-                    alert('Circle created successfully! (Integration pending)')
-                    onNavigate('dashboard')
+                  onClick={async () => {
+                    try {
+                      setTxStatus('creating')
+                      const cycleDurationInSeconds = getDuration() * 86400 // Convert days to seconds
+                      const result = await createCircle(
+                        parseInt(formData.numberOfMembers),
+                        parseFloat(formData.contributionAmount),
+                        cycleDurationInSeconds
+                      )
+                      setTxStatus('success')
+                      setTimeout(() => {
+                        onNavigate('dashboard')
+                      }, 2000)
+                    } catch (err) {
+                      setTxStatus('error')
+                      console.error('Failed to create circle:', err)
+                    }
                   }}
-                  className="flex-1 py-4 rounded-xl bg-gradient-to-r from-flow-500 to-primary-600 text-white font-semibold hover:shadow-lg hover:shadow-primary-500/50 transition-all flex items-center justify-center gap-2"
+                  disabled={isLoading}
+                  className="flex-1 py-4 rounded-xl bg-gradient-to-r from-flow-500 to-primary-600 text-white font-semibold hover:shadow-lg hover:shadow-primary-500/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Sparkles className="w-5 h-5" />
-                  Create Circle
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      Create Circle
+                    </>
+                  )}
                 </button>
               </div>
+
+              {/* Transaction Status */}
+              {txStatus === 'creating' && (
+                <div className="p-4 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                  <div>
+                    <div className="font-medium text-blue-400">Creating circle...</div>
+                    <div className="text-sm text-gray-400">Please confirm the transaction in your wallet</div>
+                  </div>
+                </div>
+              )}
+
+              {txStatus === 'success' && (
+                <div className="p-4 rounded-xl bg-green-500/20 border border-green-500/30 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-400" />
+                  <div>
+                    <div className="font-medium text-green-400">Circle created successfully!</div>
+                    <div className="text-sm text-gray-400">Redirecting to dashboard...</div>
+                    {txId && (
+                      <div className="text-xs text-gray-500 mt-1">TX: {txId.slice(0, 10)}...</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {txStatus === 'error' && error && (
+                <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-400" />
+                  <div>
+                    <div className="font-medium text-red-400">Failed to create circle</div>
+                    <div className="text-sm text-gray-400">{error}</div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </motion.div>

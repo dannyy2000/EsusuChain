@@ -354,6 +354,8 @@ access(all) contract EsusuChain {
         }
     }
 
+
+
     // Public contract functions
     access(all) fun createCircleManager(): @CircleManager {
         return <- create CircleManager()
