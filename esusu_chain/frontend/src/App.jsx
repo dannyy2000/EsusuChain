@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import './config/flow' // Initialize Flow configuration
 import LandingPage from './pages/LandingPage'
 import Dashboard from './pages/Dashboard'
 import CreateCircle from './pages/CreateCircle'

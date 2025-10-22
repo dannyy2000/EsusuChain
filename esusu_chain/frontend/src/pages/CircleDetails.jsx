@@ -11,15 +11,43 @@ import {
   Zap,
   ExternalLink,
   Copy,
-  Share2
+  Share2,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
+import { useCircleInfo } from '../hooks/useCircles'
+import { useTransactions } from '../hooks/useTransactions'
+import { useAuth } from '../hooks/useAuth'
+import { CONTRACT_ADDRESS } from '../config/flow'
 
-export default function CircleDetails({ circle, onNavigate }) {
-  if (!circle) {
+export default function CircleDetails({ circle: initialCircle, onNavigate }) {
+  const { addr } = useAuth()
+  const { joinCircle, isLoading: txLoading } = useTransactions()
+
+  // Use the hook to get real-time data if we have a circle ID
+  const { circle: liveCircle, isLoading, error } = useCircleInfo(initialCircle?.id)
+
+  // Use live data if available, otherwise fall back to initial data
+  const circle = liveCircle || initialCircle
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <span className="ml-3 text-gray-400">Loading circle details...</span>
+      </div>
+    )
+  }
+
+  if (error || !circle) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Circle not found</h2>
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">
+            {error ? 'Error loading circle' : 'Circle not found'}
+          </h2>
+          {error && <p className="text-gray-400 mb-4">{error}</p>}
           <button
             onClick={() => onNavigate('dashboard')}
             className="text-primary-400 hover:underline"
@@ -31,16 +59,30 @@ export default function CircleDetails({ circle, onNavigate }) {
     )
   }
 
-  const members = [
-    { address: '0xa8965...d113', position: 1, contributed: circle.contributionAmount * circle.currentCycle, hasReceived: false },
-    { address: '0xb7856...a224', position: 2, contributed: circle.contributionAmount * circle.currentCycle, hasReceived: false },
-    { address: '0xc6745...f335', position: 3, contributed: circle.contributionAmount * circle.currentCycle, hasReceived: false },
-    { address: '0xd5634...e446', position: 4, contributed: circle.contributionAmount * circle.currentCycle, hasReceived: false },
-    { address: '0xe4523...b557', position: 5, contributed: circle.contributionAmount * circle.currentCycle, hasReceived: false },
-  ].slice(0, circle.members)
+  // Transform blockchain members data
+  const members = (circle.members || []).map((address, i) => ({
+    address: `${address.slice(0, 6)}...${address.slice(-4)}`,
+    fullAddress: address,
+    position: i + 1,
+    contributed: circle.contributionAmount * circle.currentCycle,
+    hasReceived: i < circle.currentCycle,
+  }))
 
-  const totalContributed = members.reduce((sum, m) => sum + m.contributed, 0)
-  const progress = (circle.currentCycle / circle.members) * 100
+  const isUserMember = addr && circle.members?.includes(addr)
+  const userPosition = isUserMember ? circle.members.indexOf(addr) + 1 : null
+  const totalPool = circle.contributionAmount * circle.numberOfMembers
+  const progress = (circle.currentCycle / circle.numberOfMembers) * 100
+
+  const handleJoinCircle = async () => {
+    try {
+      await joinCircle(circle.id)
+      alert('Successfully joined circle!')
+      // Refresh the page or refetch data
+      window.location.reload()
+    } catch (err) {
+      alert('Failed to join circle: ' + err.message)
+    }
+  }
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -69,15 +111,15 @@ export default function CircleDetails({ circle, onNavigate }) {
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-4xl font-bold mb-2">{circle.name}</h1>
+              <h1 className="text-4xl font-bold mb-2">Circle #{circle.id}</h1>
               <div className="flex items-center gap-4 text-gray-400">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  <span>{circle.members} members</span>
+                  <span>{members.length} / {circle.numberOfMembers} members</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
-                  <span>{circle.cycleDuration} cycles</span>
+                  <span>{Math.round(circle.cycleDuration / 86400)} day cycles</span>
                 </div>
               </div>
             </div>
@@ -86,9 +128,13 @@ export default function CircleDetails({ circle, onNavigate }) {
               <button className="p-3 rounded-xl glass-effect border border-white/10 hover:border-primary-500/50 transition-all">
                 <Share2 className="w-5 h-5" />
               </button>
-              <div className="px-4 py-2 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 font-medium flex items-center gap-2">
+              <div className={`px-4 py-2 rounded-xl ${
+                circle.isActive
+                  ? 'bg-green-500/20 border-green-500/30 text-green-400'
+                  : 'bg-gray-500/20 border-gray-500/30 text-gray-400'
+              } font-medium flex items-center gap-2`}>
                 <Zap className="w-4 h-4" />
-                {circle.status}
+                {circle.isActive ? 'Active' : 'Completed'}
               </div>
             </div>
           </div>
@@ -99,7 +145,7 @@ export default function CircleDetails({ circle, onNavigate }) {
               <div>
                 <div className="text-sm text-gray-400 mb-1">Circle Progress</div>
                 <div className="text-2xl font-bold">
-                  Cycle {circle.currentCycle} of {circle.members}
+                  Cycle {circle.currentCycle} of {circle.numberOfMembers}
                 </div>
               </div>
               <div className="text-right">
@@ -118,8 +164,8 @@ export default function CircleDetails({ circle, onNavigate }) {
               />
             </div>
             <div className="flex items-center justify-between mt-3 text-sm text-gray-400">
-              <span>Started {circle.currentCycle} cycles ago</span>
-              <span>{circle.members - circle.currentCycle} cycles remaining</span>
+              <span>Creator: {circle.creator.slice(0, 6)}...{circle.creator.slice(-4)}</span>
+              <span>{circle.numberOfMembers - circle.currentCycle} cycles remaining</span>
             </div>
           </div>
         </div>
@@ -137,20 +183,22 @@ export default function CircleDetails({ circle, onNavigate }) {
 
               <div className="glass-effect rounded-2xl p-6 border border-white/10">
                 <div className="text-sm text-gray-400 mb-2">Total Pool</div>
-                <div className="text-2xl font-bold">{circle.totalPool}</div>
+                <div className="text-2xl font-bold">{totalPool.toFixed(2)}</div>
                 <div className="text-sm text-gray-500">FLOW</div>
               </div>
 
               <div className="glass-effect rounded-2xl p-6 border border-white/10">
                 <div className="text-sm text-gray-400 mb-2">Your Position</div>
-                <div className="text-2xl font-bold">#{circle.yourPosition}</div>
+                <div className="text-2xl font-bold">
+                  {isUserMember ? `#${userPosition}` : 'N/A'}
+                </div>
                 <div className="text-sm text-gray-500">in queue</div>
               </div>
 
               <div className="glass-effect rounded-2xl p-6 border border-white/10">
-                <div className="text-sm text-gray-400 mb-2">Next Payout</div>
-                <div className="text-2xl font-bold">{circle.nextPayout}</div>
-                <div className="text-sm text-gray-500">remaining</div>
+                <div className="text-sm text-gray-400 mb-2">Cycle Duration</div>
+                <div className="text-2xl font-bold">{Math.round(circle.cycleDuration / 86400)}</div>
+                <div className="text-sm text-gray-500">days</div>
               </div>
             </div>
 
@@ -177,7 +225,7 @@ export default function CircleDetails({ circle, onNavigate }) {
                       <div>
                         <div className="font-mono font-medium">{member.address}</div>
                         <div className="text-sm text-gray-400">
-                          Contributed: {member.contributed} FLOW
+                          Contributed: {member.contributed.toFixed(2)} FLOW
                         </div>
                       </div>
                     </div>
@@ -235,40 +283,74 @@ export default function CircleDetails({ circle, onNavigate }) {
 
           {/* Right Column - Actions & Details */}
           <div className="space-y-6">
-            {/* Your Status */}
+            {/* Your Status or Join Button */}
             <div className="glass-effect rounded-2xl p-6 border border-white/10">
-              <h3 className="text-lg font-bold mb-4">Your Status</h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-sm text-gray-400 mb-1">Position in Queue</div>
-                  <div className="text-2xl font-bold">#{circle.yourPosition}</div>
-                </div>
-
-                <div>
-                  <div className="text-sm text-gray-400 mb-1">Total Contributed</div>
-                  <div className="text-2xl font-bold">{circle.contributionAmount * circle.currentCycle} FLOW</div>
-                </div>
-
-                <div>
-                  <div className="text-sm text-gray-400 mb-1">Expected Payout</div>
-                  <div className="text-2xl font-bold text-primary-400">{circle.totalPool} FLOW</div>
-                </div>
-
-                <div className="pt-4 border-t border-white/10">
-                  <div className="text-sm text-gray-400 mb-2">Payout Status</div>
-                  {circle.hasReceived ? (
-                    <div className="flex items-center gap-2 text-green-400">
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span className="font-medium">Received</span>
+              {isUserMember ? (
+                <>
+                  <h3 className="text-lg font-bold mb-4">Your Status</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-sm text-gray-400 mb-1">Position in Queue</div>
+                      <div className="text-2xl font-bold">#{userPosition}</div>
                     </div>
+
+                    <div>
+                      <div className="text-sm text-gray-400 mb-1">Total Contributed</div>
+                      <div className="text-2xl font-bold">{(circle.contributionAmount * circle.currentCycle).toFixed(2)} FLOW</div>
+                    </div>
+
+                    <div>
+                      <div className="text-sm text-gray-400 mb-1">Expected Payout</div>
+                      <div className="text-2xl font-bold text-primary-400">{totalPool.toFixed(2)} FLOW</div>
+                    </div>
+
+                    <div className="pt-4 border-t border-white/10">
+                      <div className="text-sm text-gray-400 mb-2">Payout Status</div>
+                      {userPosition && userPosition <= circle.currentCycle ? (
+                        <div className="flex items-center gap-2 text-green-400">
+                          <CheckCircle2 className="w-5 h-5" />
+                          <span className="font-medium">Received</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <Clock className="w-5 h-5" />
+                          <span className="font-medium">Pending</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-bold mb-4">Join Circle</h3>
+                  <p className="text-gray-400 text-sm mb-4">
+                    You are not a member of this circle yet. Join to participate in the savings rotation.
+                  </p>
+                  {members.length < circle.numberOfMembers ? (
+                    <button
+                      onClick={handleJoinCircle}
+                      disabled={txLoading}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-flow-500 to-primary-600 text-white font-semibold hover:shadow-lg hover:shadow-primary-500/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {txLoading ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Joining...
+                        </>
+                      ) : (
+                        <>
+                          <Users className="w-5 h-5" />
+                          Join Circle
+                        </>
+                      )}
+                    </button>
                   ) : (
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <Clock className="w-5 h-5" />
-                      <span className="font-medium">Pending</span>
+                    <div className="p-4 rounded-xl bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm">
+                      Circle is full. No more members can join.
                     </div>
                   )}
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             {/* Automation Info */}
@@ -308,10 +390,15 @@ export default function CircleDetails({ circle, onNavigate }) {
                 </div>
                 <div>
                   <div className="text-gray-400 mb-1">Contract Address</div>
-                  <button className="font-mono text-primary-400 hover:underline flex items-center gap-2">
-                    0xa8965...d113
+                  <a
+                    href={`https://testnet.flowscan.io/contract/${CONTRACT_ADDRESS}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-primary-400 hover:underline flex items-center gap-2"
+                  >
+                    {CONTRACT_ADDRESS.slice(0, 10)}...
                     <ExternalLink className="w-3 h-3" />
-                  </button>
+                  </a>
                 </div>
                 <div>
                   <div className="text-gray-400 mb-1">Network</div>
