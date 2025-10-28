@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useTransactions } from '../hooks/useTransactions'
+import { saveCircleName } from '../utils/circleNames'
 
 export default function CreateCircle({ onNavigate }) {
   const { loggedIn } = useAuth()
@@ -47,11 +48,14 @@ export default function CreateCircle({ onNavigate }) {
   }
 
   const cycleDurations = [
-    { value: 'daily', label: 'Daily', days: 1 },
-    { value: 'weekly', label: 'Weekly', days: 7 },
-    { value: 'biweekly', label: 'Bi-weekly', days: 14 },
-    { value: 'monthly', label: 'Monthly', days: 30 },
-    { value: 'custom', label: 'Custom', days: null }
+    { value: '1min', label: '1 Minute', seconds: 60, isDemo: true },
+    { value: '5min', label: '5 Minutes', seconds: 300, isDemo: true },
+    { value: '10min', label: '10 Minutes', seconds: 600, isDemo: true },
+    { value: 'daily', label: 'Daily', seconds: 86400 },
+    { value: 'weekly', label: 'Weekly', seconds: 604800 },
+    { value: 'biweekly', label: 'Bi-weekly', seconds: 1209600 },
+    { value: 'monthly', label: 'Monthly', seconds: 2592000 },
+    { value: 'custom', label: 'Custom', seconds: null }
   ]
 
   const handleChange = (e) => {
@@ -66,16 +70,36 @@ export default function CreateCircle({ onNavigate }) {
 
   const getDuration = () => {
     if (formData.cycleDuration === 'custom') {
-      return formData.customDays || 0
+      // Custom is in days, convert to seconds
+      return (parseInt(formData.customDays) || 0) * 86400
     }
     const duration = cycleDurations.find(d => d.value === formData.cycleDuration)
-    return duration?.days || 0
+    return duration?.seconds || 0
+  }
+
+  const getDurationDisplay = () => {
+    const seconds = getDuration()
+    if (seconds < 3600) {
+      return `${Math.round(seconds / 60)} minutes`
+    } else if (seconds < 86400) {
+      return `${Math.round(seconds / 3600)} hours`
+    } else {
+      return `${Math.round(seconds / 86400)} days`
+    }
   }
 
   const getTotalDuration = () => {
     const members = parseInt(formData.numberOfMembers) || 0
-    const days = getDuration()
-    return members * days
+    const seconds = getDuration()
+    const totalSeconds = members * seconds
+    // Return in most appropriate unit
+    if (totalSeconds < 3600) {
+      return `${Math.round(totalSeconds / 60)} minutes`
+    } else if (totalSeconds < 86400) {
+      return `${Math.round(totalSeconds / 3600)} hours`
+    } else {
+      return `${Math.round(totalSeconds / 86400)} days`
+    }
   }
 
   return (
@@ -172,6 +196,9 @@ export default function CreateCircle({ onNavigate }) {
                   placeholder="e.g., Family Savings Circle"
                   className="w-full px-4 py-3 rounded-xl glass-effect border border-white/10 focus:border-primary-500/50 outline-none transition-colors"
                 />
+                <p className="text-xs text-gray-400 mt-2">
+                  Give your circle a memorable name to identify it easily
+                </p>
               </div>
 
               {/* Number of Members */}
@@ -196,7 +223,7 @@ export default function CreateCircle({ onNavigate }) {
 
               <button
                 onClick={() => setStep(2)}
-                disabled={!formData.name || !formData.numberOfMembers}
+                disabled={!formData.name || !formData.numberOfMembers || parseInt(formData.numberOfMembers) < 1}
                 className="w-full py-4 rounded-xl bg-gradient-to-r from-flow-500 to-primary-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-primary-500/50 transition-all"
               >
                 Continue
@@ -235,7 +262,7 @@ export default function CreateCircle({ onNavigate }) {
                   <Clock className="w-4 h-4" />
                   Cycle Duration
                 </label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                   {cycleDurations.map((duration) => (
                     <button
                       key={duration.value}
@@ -246,10 +273,7 @@ export default function CreateCircle({ onNavigate }) {
                           : 'border-white/10 bg-white/5 hover:border-white/20'
                       }`}
                     >
-                      <div className="font-medium">{duration.label}</div>
-                      {duration.days && (
-                        <div className="text-xs text-gray-400 mt-1">{duration.days} days</div>
-                      )}
+                      <div className="font-medium text-sm">{duration.label}</div>
                     </button>
                   ))}
                 </div>
@@ -325,11 +349,11 @@ export default function CreateCircle({ onNavigate }) {
                   </div>
                   <div className="p-4 rounded-xl bg-white/5">
                     <div className="text-sm text-gray-400 mb-1">Cycle Duration</div>
-                    <div className="font-semibold capitalize">{formData.cycleDuration === 'custom' ? `${formData.customDays} days` : formData.cycleDuration}</div>
+                    <div className="font-semibold">{getDurationDisplay()}</div>
                   </div>
                   <div className="p-4 rounded-xl bg-white/5">
                     <div className="text-sm text-gray-400 mb-1">Total Duration</div>
-                    <div className="font-semibold">{getTotalDuration()} days</div>
+                    <div className="font-semibold">{getTotalDuration()}</div>
                   </div>
                 </div>
               </div>
@@ -372,12 +396,41 @@ export default function CreateCircle({ onNavigate }) {
                   onClick={async () => {
                     try {
                       setTxStatus('creating')
-                      const cycleDurationInSeconds = getDuration() * 86400 // Convert days to seconds
+
+                      // Validate contribution amount
+                      const contribution = parseFloat(formData.contributionAmount)
+                      if (!contribution || contribution <= 0) {
+                        setTxStatus('error')
+                        alert('Please enter a valid contribution amount greater than 0 FLOW')
+                        return
+                      }
+
+                      const cycleDurationInSeconds = getDuration() // Already in seconds
+
+                      console.log('Creating circle with params:', {
+                        numberOfMembers: formData.numberOfMembers,
+                        contributionAmount: contribution,
+                        cycleDuration: cycleDurationInSeconds,
+                        cycleDurationDisplay: getDurationDisplay(),
+                        name: formData.name
+                      })
+
                       const result = await createCircle(
                         parseInt(formData.numberOfMembers),
-                        parseFloat(formData.contributionAmount),
+                        contribution,
                         cycleDurationInSeconds
                       )
+
+                      console.log('Create circle result:', result)
+
+                      // Save circle name to localStorage if we got a circle ID
+                      if (result.circleId !== null && result.circleId !== undefined) {
+                        saveCircleName(result.circleId, formData.name)
+                        console.log(`✅ Saved circle name: "${formData.name}" for Circle #${result.circleId}`)
+                      } else {
+                        console.warn('⚠️ Circle created but circleId not found in response. Name not saved.')
+                      }
+
                       setTxStatus('success')
                       setTimeout(() => {
                         onNavigate('dashboard')
@@ -385,6 +438,7 @@ export default function CreateCircle({ onNavigate }) {
                     } catch (err) {
                       setTxStatus('error')
                       console.error('Failed to create circle:', err)
+                      // Error is already user-friendly from the hook
                     }
                   }}
                   disabled={isLoading}
@@ -440,12 +494,6 @@ export default function CreateCircle({ onNavigate }) {
             </div>
           )}
         </motion.div>
-
-        {/* Help Text */}
-        <p className="text-center text-gray-500 text-sm mt-6">
-          Need help? Check out our{' '}
-          <span className="text-primary-400 cursor-pointer hover:underline">documentation</span>
-        </p>
       </div>
     </div>
   )

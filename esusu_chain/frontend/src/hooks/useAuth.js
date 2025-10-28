@@ -8,7 +8,22 @@ export function useAuth() {
   useEffect(() => {
     // Subscribe to authentication changes
     const unsubscribe = fcl.currentUser.subscribe((currentUser) => {
-      setUser(currentUser)
+      console.log('🔐 Auth state changed:', {
+        loggedIn: currentUser.loggedIn,
+        addr: currentUser.addr,
+        timestamp: new Date().toISOString()
+      })
+
+      setUser((prevUser) => {
+        // If user was logged in and now isn't, log warning
+        if (prevUser.loggedIn && !currentUser.loggedIn) {
+          console.warn('⚠️ User was logged out! This might be due to:')
+          console.warn('   1. Wallet extension issue')
+          console.warn('   2. Transaction approval flow')
+          console.warn('   3. Session timeout')
+        }
+        return currentUser
+      })
       setIsLoading(false)
     })
 
