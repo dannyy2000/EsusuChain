@@ -137,7 +137,7 @@ transaction(circleId: UInt64) {
 
             // Issue handler capability
             let handlerCap = signer.capabilities.storage.issue<
-                auth(FlowTransactionScheduler.Execute) &FlowTransactionScheduler.TransactionHandler
+                auth(FlowTransactionScheduler.Execute) &{FlowTransactionScheduler.TransactionHandler}
             >(handlerPath)
 
             log("Handler created and saved")
@@ -147,7 +147,7 @@ transaction(circleId: UInt64) {
                 let manager <- FlowTransactionSchedulerUtils.createManager()
                 signer.storage.save(<-manager, to: FlowTransactionSchedulerUtils.managerStoragePath)
 
-                let managerCapPublic = signer.capabilities.storage.issue<&FlowTransactionSchedulerUtils.Manager>(
+                let managerCapPublic = signer.capabilities.storage.issue<&{FlowTransactionSchedulerUtils.Manager}>(
                     FlowTransactionSchedulerUtils.managerStoragePath
                 )
                 signer.capabilities.publish(managerCapPublic, at: FlowTransactionSchedulerUtils.managerPublicPath)
@@ -157,7 +157,7 @@ transaction(circleId: UInt64) {
 
             // Borrow manager
             let manager = signer.storage.borrow<
-                auth(FlowTransactionSchedulerUtils.Owner) &FlowTransactionSchedulerUtils.Manager
+                auth(FlowTransactionSchedulerUtils.Owner) &{FlowTransactionSchedulerUtils.Manager}
             >(
                 from: FlowTransactionSchedulerUtils.managerStoragePath
             ) ?? panic("Could not borrow Manager")
@@ -276,7 +276,7 @@ transaction(circleId: UInt64) {
 
         // Issue handler capability
         let handlerCap = signer.capabilities.storage.issue<
-            auth(FlowTransactionScheduler.Execute) &FlowTransactionScheduler.TransactionHandler
+            auth(FlowTransactionScheduler.Execute) &{FlowTransactionScheduler.TransactionHandler}
         >(handlerPath)
 
         log("Handler created and saved")
@@ -286,7 +286,7 @@ transaction(circleId: UInt64) {
             let manager <- FlowTransactionSchedulerUtils.createManager()
             signer.storage.save(<-manager, to: FlowTransactionSchedulerUtils.managerStoragePath)
 
-            let managerCapPublic = signer.capabilities.storage.issue<&FlowTransactionSchedulerUtils.Manager>(
+            let managerCapPublic = signer.capabilities.storage.issue<&{FlowTransactionSchedulerUtils.Manager}>(
                 FlowTransactionSchedulerUtils.managerStoragePath
             )
             signer.capabilities.publish(managerCapPublic, at: FlowTransactionSchedulerUtils.managerPublicPath)
@@ -296,7 +296,7 @@ transaction(circleId: UInt64) {
 
         // Borrow manager
         let manager = signer.storage.borrow<
-            auth(FlowTransactionSchedulerUtils.Owner) &FlowTransactionSchedulerUtils.Manager
+            auth(FlowTransactionSchedulerUtils.Owner) &{FlowTransactionSchedulerUtils.Manager}
         >(
             from: FlowTransactionSchedulerUtils.managerStoragePath
         ) ?? panic("Could not borrow Manager")
