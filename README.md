@@ -41,7 +41,7 @@ EsusuChain is a blockchain-based implementation of traditional rotating savings 
 │         │                  │                  │             │
 │         └──────────────────┴──────────────────┘             │
 │                          │                                   │
-│                    USDC Vaults                               │
+│                       Vaults                               │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
@@ -77,7 +77,7 @@ esusu_chain/
 │   │   ├── get_circle_info.cdc
 │   │   ├── get_member_info.cdc
 │   │   ├── get_user_circles.cdc
-│   │   └── check_usdc_balance.cdc
+│   │   └── check_balance.cdc
 │   └── tests/
 │       └── EsusuChain_test.cdc
 ├── flow.json
