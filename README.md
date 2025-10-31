@@ -62,7 +62,17 @@ Vercel link: https://esusu-chain.vercel.app/
 ```
 
 ```
-Contract Address: 0xa89655a0f8e3d113 (deployed on Flow testnet)
+📢 Social Media Post
+
+We’ve officially launched EsusuChain on the Flow blockchain — a decentralized platform bringing African-style rotating savings groups (Esusu) to Web3!
+Join the revolution of community savings powered by Flow. 💸🌍
+
+👉 Try it here: https://esusuchain.vercel.app
+
+🔗 Contract: 0xa89655a0f8e3d113 (Flow Testnet)
+#FlowBlockchain #EsusuChain #Web3Savings #FlowHackathon @flow_blockchain
+
+📍 Posted on X (Twitter): https://x.com/0xDanny__/status/1984279590085546115
 ```
 
 ## Project Structure
