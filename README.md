@@ -1,6 +1,6 @@
 # EsusuChain - Decentralized Rotating Savings on Flow
 
-EsusuChain is a blockchain-based implementation of traditional rotating savings and credit associations (ROSCA), also known as "Esusu" in many African communities. Built on the Flow blockchain with Cadence smart contracts, it provides a trustless, automated savings circle platform using USDC stablecoin.
+EsusuChain is a blockchain-based implementation of traditional rotating savings and credit associations (ROSCA), also known as "Esusu" in many African communities. Built on the Flow blockchain with Cadence smart contracts, it provides a trustless, automated savings circle system powered by Flow Token (FLOW).
 
 ## Features
 
@@ -22,10 +22,11 @@ EsusuChain is a blockchain-based implementation of traditional rotating savings 
 - Each member receives total pool amount once
 - Circle completes after all members receive payouts
 
-### 4. USDC Integration
-- Uses USDC (FiatToken) for stable value
-- Built on Flow's FungibleToken standard
-- Secure vault management for circle funds
+### 4.Flow Token Integration
+
+- Built on Flow’s FungibleToken standard
+- Uses Flow Token (FLOW) for contributions and payouts
+- Secure vault management for all circle funds
 
 ## Architecture
 
@@ -52,6 +53,10 @@ EsusuChain is a blockchain-based implementation of traditional rotating savings 
 │  │    Scheduler     │────────▶│    Executor      │         │
 │  └──────────────────┘         └──────────────────┘         │
 └─────────────────────────────────────────────────────────────┘
+```
+
+```
+Contract Address: 0xa89655a0f8e3d113 (deployed on Flow testnet)
 ```
 
 ## Project Structure
@@ -126,17 +131,7 @@ flow transactions send cadence/transactions/setup_circle_manager.cdc \
   --signer your-account
 ```
 
-### 2. Setup USDC Vault
-
-Ensure you have a USDC vault configured:
-
-```bash
-flow transactions send cadence/transactions/setup_usdc_vault.cdc \
-  --network testnet \
-  --signer your-account
-```
-
-### 3. Create a Circle
+### 2. Create a Circle
 
 Create a new savings circle:
 
@@ -156,7 +151,7 @@ Parameters:
 - Contribution amount: 100.0 USDC
 - Cycle duration: 604800 seconds (7 days)
 
-### 4. Join a Circle
+### 3. Join a Circle
 
 Join an existing circle:
 
@@ -169,7 +164,7 @@ flow transactions send cadence/transactions/join_circle.cdc \
   --signer member-account
 ```
 
-### 5. Query Circle Information
+### 4. Query Circle Information
 
 Get details about a circle:
 
@@ -181,7 +176,7 @@ flow scripts execute cadence/scripts/get_circle_info.cdc \
   --network testnet
 ```
 
-### 6. Make a Contribution
+### 5. Make a Contribution
 
 Contribute to a circle:
 
@@ -208,7 +203,7 @@ Represents a savings circle with:
 - `currentCycle`: Current cycle number
 - `currentPayoutPosition`: Next member to receive payout
 - `members`: Member information mapping
-- `vault`: USDC vault holding contributions
+- `vault`: Flow Token vault holding contributions
 
 #### CircleManager Resource
 Manages multiple circles for a user:
@@ -261,7 +256,7 @@ EsusuChain uses Forte Workflow for automated contributions and payouts. See [FOR
 2. **Amount Validation**: Contributions must match exact circle amount
 3. **Cycle Management**: Payouts only execute when all members contribute
 4. **Status Checks**: Circle must be active for operations
-5. **Vault Security**: Circle funds stored in isolated USDC vault
+5. **Vault Security**: Circle funds are securely stored in isolated FLOW token vaults, ensuring transparent and tamper-proof fund management on-chain.
 
 ## Testing Strategy
 
@@ -316,7 +311,7 @@ The project includes comprehensive tests covering:
 
 - [ ] Implement penalty mechanism for missed contributions
 - [ ] Add emergency withdrawal functionality
-- [ ] Support multiple token types (not just USDC)
+- [ ] Support multiple token types (not just Flow Token)
 - [ ] Build web interface for circle management
 - [ ] Implement reputation system for members
 - [ ] Add circle discovery and recommendation features
