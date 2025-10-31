@@ -2,6 +2,12 @@
 
 EsusuChain is a blockchain-based implementation of traditional rotating savings and credit associations (ROSCA), also known as "Esusu" in many African communities. Built on the Flow blockchain with Cadence smart contracts, it provides a trustless, automated savings circle system powered by Flow Token (FLOW).
 
+
+```
+Contract Address: 0xa89655a0f8e3d113 (deployed on Flow testnet)
+Vercel link: https://esusu-chain.vercel.app/
+```
+
 ## Features
 
 ### 1. Circle Creation
